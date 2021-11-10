@@ -2,6 +2,7 @@ package mode
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/radekg/terraform-provisioner-ansible/v2/types"
+	"github.com/radekg/terraform-provisioner-ansible/v2/shellescape"
 	uuid "github.com/satori/go.uuid"
 
 	localExec "github.com/hashicorp/terraform/builtin/provisioners/local-exec"
@@ -267,9 +269,11 @@ func (v *LocalMode) Run(plays []*types.Play, ansibleSSHSettings *types.AnsibleSS
 			return err
 		}
 
-		v.o.Output(fmt.Sprintf("running local command: %s", command))
+		if !play.Quiet() {
+			v.o.Output(fmt.Sprintf("running local command: %s", command))
+		}
 
-		if err := v.runCommand(command); err != nil {
+		if err := v.runCommand(command, play); err != nil {
 			return err
 		}
 
@@ -382,7 +386,7 @@ func (v *LocalMode) writeInventory(play *types.Play) (string, error) {
 	return play.InventoryFile(), nil
 }
 
-func (v *LocalMode) runCommand(command string) error {
+func (v *LocalMode) runCommand(command string, play *types.Play) error {
 	localExecProvisioner := localExec.Provisioner()
 
 	instanceState := &terraform.InstanceState{
@@ -398,14 +402,29 @@ func (v *LocalMode) runCommand(command string) error {
 		Tainted: false,
 	}
 
+	var config_data map[string]interface{}
+	if play.Quiet() && len(play.ExtraVars()) > 0 {
+		extraVars, err := json.Marshal(play.ExtraVars())
+		if err != nil {
+			return err
+		}
+		singleQuotteEscape := shellescape.NewSingleQuoteEscape(string(extraVars))
+		config_data = map[string]interface{}{
+			"command": command,
+			"environment": map[string]interface{}{
+				"EXTRA_VARS": singleQuotteEscape.Safe(),
+			},
+		}
+	} else {
+		config_data = map[string]interface{}{
+			"command": command,
+		}
+	}
+
 	config := &terraform.ResourceConfig{
 		ComputedKeys: make([]string, 0),
-		Raw: map[string]interface{}{
-			"command": command,
-		},
-		Config: map[string]interface{}{
-			"command": command,
-		},
+		Raw: config_data,
+		Config: config_data,
 	}
 
 	return localExecProvisioner.Apply(v.o, instanceState, config)

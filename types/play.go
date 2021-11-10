@@ -31,6 +31,7 @@ type Play struct {
 	vaultID                   []string
 	vaultPasswordFile         string
 	verbose                   bool
+	quiet                     bool
 	overrideInventoryFile     string
 	overrideVaultID           []string
 	overrideVaultPasswordFile string
@@ -65,6 +66,7 @@ const (
 	playAttributeVaultID           = "vault_id"
 	playAttributeVaultPasswordFile = "vault_password_file"
 	playAttributeVerbose           = "verbose"
+	playAttributeQuiet             = "quiet"
 )
 
 // NewPlaySchema returns a new play schema.
@@ -151,6 +153,10 @@ func NewPlaySchema() *schema.Schema {
 					Type:     schema.TypeBool,
 					Optional: true,
 				},
+				playAttributeQuiet: &schema.Schema{
+					Type:     schema.TypeBool,
+					Optional: true,
+				},
 			},
 		},
 	}
@@ -179,6 +185,7 @@ func NewPlayFromMapInterface(vals map[string]interface{}, defaults *Defaults) *P
 		vaultID:           listOfInterfaceToListOfString(vals[playAttributeVaultID].([]interface{})),
 		vaultPasswordFile: vals[playAttributeVaultPasswordFile].(string),
 		verbose:           vals[playAttributeVerbose].(bool),
+		quiet:             vals[playAttributeQuiet].(bool),
 	}
 
 	emptySet := "*Set(map[string]interface {}(nil))"
@@ -349,6 +356,11 @@ func (v *Play) VaultID() []string {
 // Verbose represents Ansible --verbose flag.
 func (v *Play) Verbose() bool {
 	return v.verbose
+}
+
+// Quiet hides sensitive data printed by this plugin.
+func (v *Play) Quiet() bool {
+	return v.quiet
 }
 
 // SetOverrideInventoryFile is used by the provisioner in the following cases:
@@ -542,12 +554,17 @@ func (v *Play) appendSharedArguments(command string, ansibleArgs LocalModeAnsibl
 	}
 	// extra vars:
 	if len(v.ExtraVars()) > 0 {
-		extraVars, err := json.Marshal(v.ExtraVars())
-		if err != nil {
-			return "", err
+		if v.Quiet() {
+			command = fmt.Sprintf("%s --extra-vars=\"$EXTRA_VARS\"", command)
+		} else {
+			extraVars, err := json.Marshal(v.ExtraVars())
+			if err != nil {
+				return "", err
+			}
+			singleQuotteEscape := shellescape.NewSingleQuoteEscape(string(extraVars))
+			command = fmt.Sprintf("%s --extra-vars='%s'", command, singleQuotteEscape.Safe())
 		}
-		singleQuotteEscape := shellescape.NewSingleQuoteEscape(string(extraVars))
-		command = fmt.Sprintf("%s --extra-vars='%s'", command, singleQuotteEscape.Safe())
+		
 	}
 	// forks:
 	if v.Forks() > 0 {
