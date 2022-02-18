@@ -403,16 +403,16 @@ func (v *LocalMode) runCommand(command string, play *types.Play) error {
 	}
 
 	var config_data map[string]interface{}
-	if play.Quiet() && len(play.ExtraVars()) > 0 {
+	if len(play.ExtraVars()) > 0 {
 		extraVars, err := json.Marshal(play.ExtraVars())
 		if err != nil {
 			return err
 		}
-		singleQuotteEscape := shellescape.NewSingleQuoteEscape(string(extraVars))
 		config_data = map[string]interface{}{
 			"command": command,
 			"environment": map[string]interface{}{
-				"EXTRA_VARS": singleQuotteEscape.Safe(),
+				"EXTRA_VARS": string(extraVars),
+				"ANSIBLE_KEEP_REMOTE_FILES": "1",
 			},
 		}
 	} else {
