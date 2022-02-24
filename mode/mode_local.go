@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/radekg/terraform-provisioner-ansible/v2/types"
-	"github.com/radekg/terraform-provisioner-ansible/v2/shellescape"
 	uuid "github.com/satori/go.uuid"
 
 	localExec "github.com/hashicorp/terraform/builtin/provisioners/local-exec"
